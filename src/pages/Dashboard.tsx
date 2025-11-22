@@ -18,8 +18,8 @@ const Dashboard: React.FC = () => {
   const role = localStorage.getItem("role") || "";
   const token = localStorage.getItem("token") || "";
 
-  // ✅ URL DE L'API AVEC VARIABLE D'ENVIRONNEMENT
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  // ✅ VARIABLE D'ENVIRONNEMENT UTILISÉE
+  const APP_NAME = import.meta.env.VITE_APP_NAME || 'Cartes Inventaire';
 
   const CarteStatistique: React.FC<{
     titre: string;
@@ -230,7 +230,7 @@ const Dashboard: React.FC = () => {
                   Tableau de Bord Statistique
                 </h1>
                 <p className="text-sm text-gray-600">
-                  COORDINATION ABIDJAN NORD-COCODY
+                  {APP_NAME} - COORDINATION ABIDJAN NORD-COCODY
                 </p>
               </div>
             </div>
