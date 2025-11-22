@@ -32,14 +32,14 @@ const Inventaire: React.FC = () => {
   const role = localStorage.getItem("role") || "";
   const token = localStorage.getItem("token") || "";
 
+  // ✅ CONFIGURATION AVEC NGROK
+  const API_URL = import.meta.env.VITE_API_URL || 'https://overnarrowly-incomparable-antoine.ngrok-free.dev';
+
   // ✅ CONFIGURATION DES PERMISSIONS
   const canModifyData = ["Administrateur", "Superviseur"].includes(role);
   const canExportAll = ["Administrateur", "Superviseur"].includes(role);
   const canExportResults = ["Administrateur", "Superviseur"].includes(role);
   const canImportExcel = ["Administrateur", "Superviseur"].includes(role);
-
-  // ✅ URL DE L'API AVEC VARIABLE D'ENVIRONNEMENT
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
   // ✅ FONCTION DE VÉRIFICATION DU TOKEN
   const checkToken = (): boolean => {
@@ -59,15 +59,13 @@ const Inventaire: React.FC = () => {
     console.log('📢 Notification avancée du Dashboard...');
     
     try {
-      // 1. D'abord forcer le recalcul des statistiques
       await cartesService.forceRefreshAndGetStats(token);
       console.log('✅ Statistiques recalculées avec succès');
     } catch (error: any) {
       console.warn('⚠️ Recalcul des statistiques échoué, continuation...');
     }
     
-    // 2. Ensuite notifier le Dashboard
-    // Événement personnalisé (même onglet)
+    // Notifier le Dashboard
     const refreshEvent = new CustomEvent('dashboardRefreshNeeded', {
       detail: { 
         force: true, 
@@ -77,30 +75,13 @@ const Inventaire: React.FC = () => {
     });
     window.dispatchEvent(refreshEvent);
     
-    // localStorage (entre onglets)
     localStorage.setItem('lastDataUpdate', Date.now().toString());
     localStorage.setItem('forceStatsRefresh', 'true');
-    
-    // BroadcastChannel (entre onglets moderne)
-    if (typeof BroadcastChannel !== 'undefined') {
-      try {
-        const channel = new BroadcastChannel('dashboard_updates');
-        channel.postMessage({ 
-          type: 'data_updated', 
-          timestamp: Date.now(),
-          forceRefresh: true,
-          source: 'inventaire'
-        });
-        setTimeout(() => channel.close(), 1000);
-      } catch (e) {
-        console.log('BroadcastChannel non supporté');
-      }
-    }
     
     console.log('✅ Notification du Dashboard terminée');
   };
 
-  // 🔍 RECHERCHE MULTICRITÈRES AVEC PAGINATION - CORRIGÉE
+  // 🔍 RECHERCHE MULTICRITÈRES CORRIGÉE
   const handleRecherche = async (page: number = 1) => {
     if (!checkToken()) return;
     
@@ -114,7 +95,10 @@ const Inventaire: React.FC = () => {
       params.append('page', page.toString());
       params.append('limit', '50');
 
-      const response = await fetch(`${API_BASE_URL}/api/inventaire/recherche?${params}`, {
+      const url = `${API_URL}/api/inventaire/recherche?${params}`;
+      console.log('🔗 Recherche URL:', url);
+
+      const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -129,53 +113,60 @@ const Inventaire: React.FC = () => {
         return;
       }
 
-      if (response.ok) {
-        const data = await response.json();
-        setResultats(data.cartes);
-        setTotalResultats(data.total);
-        setCurrentPage(data.page);
-        setTotalPages(data.totalPages);
-        setHasModifications(false); // Réinitialiser les modifications après une nouvelle recherche
-      } else {
-        const errorData = await response.json();
-        console.error("Erreur recherche:", errorData);
-        alert(`Erreur lors de la recherche: ${errorData.error || 'Erreur serveur'}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Erreur recherche:', {
+          status: response.status,
+          error: errorText
+        });
+        throw new Error(`Erreur ${response.status}: ${errorText}`);
       }
+
+      const data = await response.json();
+      console.log('✅ Résultats recherche:', {
+        cartes: data.cartes?.length || 0,
+        total: data.total
+      });
+
+      setResultats(data.cartes || []);
+      setTotalResultats(data.total || 0);
+      setCurrentPage(data.page || 1);
+      setTotalPages(data.totalPages || 1);
+      setHasModifications(false);
+
     } catch (error: any) {
-      console.error("Erreur recherche:", error);
-      alert("Erreur de connexion au serveur");
+      console.error("❌ Erreur recherche:", error);
+      
+      let errorMessage = "Erreur de connexion au serveur";
+      if (error.message.includes('Failed to fetch') || error.message.includes('Network Error')) {
+        errorMessage = "❌ Impossible de joindre le serveur. Vérifiez que le backend est démarré.";
+      }
+      
+      alert(errorMessage);
+      setResultats([]);
+      setTotalResultats(0);
     } finally {
       setLoading(false);
     }
   };
 
-  // 💾 FONCTION DE SAUVEGARDE CORRIGÉE - VERSION ULTIME
+  // 💾 FONCTION DE SAUVEGARDE CORRIGÉE
   const handleSaveModifications = async () => {
     if (!checkToken()) return;
     
     try {
       console.log('💾 Début de la sauvegarde des modifications...');
       
-      // Compter les cartes modifiées pour le debug
-      const cartesAvecDelivrance = resultats.filter(carte => 
-        carte.DELIVRANCE && carte.DELIVRANCE.toString().trim() !== ''
-      );
-      console.log('📊 Cartes avec DELIVRANCE:', cartesAvecDelivrance.length);
-      
-      // ✅ FILTRER LES CARTES AVEC IDs VALIDES
+      // Filtrer les cartes valides
       const cartesValides = resultats.filter(carte => {
         const id = carte.ID;
-        
-        // Vérification type-safe
         if (id === null || id === undefined) {
           console.warn('⚠️ Carte ignorée (ID null/undefined):', { nom: carte.NOM });
           return false;
         }
         
-        // Convertir en string pour les comparaisons
         const idString = id.toString();
         const idNumber = Number(id);
-        
         const idValide = idString !== '' &&
                         idString !== 'batch' && 
                         idString !== 'null' && 
@@ -196,19 +187,15 @@ const Inventaire: React.FC = () => {
         return;
       }
       
-      // ✅ SAUVEGARDER SEULEMENT LES CARTES VALIDES
+      // ✅ SAUVEGARDER LES CARTES VALIDES
       await updateCartes(cartesValides, token);
       setHasModifications(false);
       
-      // 🚨 FORCER LA SYNCHRONISATION AVEC LE DASHBOARD
+      // 🚨 FORCER LA SYNCHRONISATION
       await notifyDashboardRefreshEnhanced();
-      
-      // ⏰ Attendre un peu pour que tout se synchronise
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       alert(`✅ ${cartesValides.length} modification(s) enregistrée(s) avec succès !`);
-      
-      console.log('💾 Sauvegarde terminée avec succès');
       
     } catch (error: any) {
       console.error("❌ Erreur sauvegarde:", error);
@@ -223,20 +210,7 @@ const Inventaire: React.FC = () => {
     }
   };
 
-  // 📤 GESTION DU CLIC SUR "IMPORTER EXCEL"
-  const handleImportClick = () => {
-    if (!checkToken()) return;
-    
-    const hideInstructions = localStorage.getItem('hideImportInstructions');
-    
-    if (hideInstructions === 'true') {
-      fileInputRef.current?.click();
-    } else {
-      setShowImportModal(true);
-    }
-  };
-
-  // 📤 IMPORT EXCEL DIRECT (VERSION CORRIGÉE AVEC SYNCHRO)
+  // 📤 IMPORT EXCEL CORRIGÉ
   const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!checkToken()) return;
     
@@ -254,7 +228,10 @@ const Inventaire: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_BASE_URL}/api/import-export/import`, {
+      const url = `${API_URL}/api/import-export/import`;
+      console.log('🔗 Import URL:', url);
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -274,16 +251,13 @@ const Inventaire: React.FC = () => {
 
       if (response.ok) {
         showImportResult(result.stats);
-        
-        // 📢 NOTIFIER LE DASHBOARD DU CHANGEMENT
         await notifyDashboardRefreshEnhanced();
-        
         handleRecherche(1);
       } else {
         alert(`❌ Erreur lors de l'import: ${result.error}`);
       }
     } catch (error: any) {
-      console.error('Erreur import:', error);
+      console.error('❌ Erreur import:', error);
       alert('❌ Erreur lors de l\'import');
     } finally {
       setImportLoading(false);
@@ -293,7 +267,7 @@ const Inventaire: React.FC = () => {
     }
   };
 
-  // 📤 IMPORT DEPUIS LE MODAL (VERSION CORRIGÉE AVEC SYNCHRO)
+  // 📤 IMPORT DEPUIS LE MODAL
   const handleImportFromModal = async (file: File) => {
     if (!checkToken()) return;
     
@@ -303,7 +277,8 @@ const Inventaire: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_BASE_URL}/api/import-export/import`, {
+      const url = `${API_URL}/api/import-export/import`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -323,16 +298,13 @@ const Inventaire: React.FC = () => {
 
       if (response.ok) {
         showImportResult(result.stats);
-        
-        // 📢 NOTIFIER LE DASHBOARD DU CHANGEMENT
         await notifyDashboardRefreshEnhanced();
-        
         handleRecherche(1);
       } else {
         alert(`❌ Erreur lors de l'import: ${result.error}`);
       }
     } catch (error: any) {
-      console.error('Erreur import:', error);
+      console.error('❌ Erreur import:', error);
       alert('❌ Erreur lors de l\'import');
     } finally {
       setImportLoading(false);
@@ -359,14 +331,15 @@ const Inventaire: React.FC = () => {
     alert(`${emoji} ${message}`);
   };
 
-  // 📥 EXPORT EXCEL DE TOUTES LES CARTES - CORRIGÉ
+  // 📥 EXPORT EXCEL DE TOUTES LES CARTES
   const handleExportAllExcel = async () => {
     if (!checkToken()) return;
     
     try {
       setLoading(true);
       
-      const response = await fetch(`${API_BASE_URL}/api/import-export/export`, {
+      const url = `${API_URL}/api/import-export/export`;
+      const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
         },
@@ -396,14 +369,14 @@ const Inventaire: React.FC = () => {
         alert('❌ Erreur lors de l\'export Excel');
       }
     } catch (error: any) {
-      console.error('Erreur export Excel:', error);
+      console.error('❌ Erreur export Excel:', error);
       alert('❌ Erreur lors de l\'export Excel');
     } finally {
       setLoading(false);
     }
   };
 
-  // 📥 EXPORT EXCEL DES RÉSULTATS DE RECHERCHE - CORRIGÉ
+  // 📥 EXPORT EXCEL DES RÉSULTATS
   const handleExportResultsExcel = async () => {
     if (!checkToken()) return;
     
@@ -417,7 +390,8 @@ const Inventaire: React.FC = () => {
         }
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/import-export/export-resultats?${params}`, {
+      const url = `${API_URL}/api/import-export/export-resultats?${params}`;
+      const response = await fetch(url, {
         headers: { 
           'Authorization': `Bearer ${token}`,
         },
@@ -449,7 +423,7 @@ const Inventaire: React.FC = () => {
         alert('❌ Erreur lors de l\'export des résultats');
       }
     } catch (error: any) {
-      console.error('Erreur export résultats Excel:', error);
+      console.error('❌ Erreur export résultats Excel:', error);
       alert('❌ Erreur lors de l\'export des résultats');
     } finally {
       setLoading(false);
@@ -458,13 +432,6 @@ const Inventaire: React.FC = () => {
 
   const handleUpdateResultats = (nouvellesCartes: Carte[]) => {
     console.log('🔄 Mise à jour des résultats:', nouvellesCartes.length, 'cartes');
-    
-    // Debug: compter les cartes avec DELIVRANCE
-    const cartesAvecDelivrance = nouvellesCartes.filter(carte => 
-      carte.DELIVRANCE && carte.DELIVRANCE.toString().trim() !== ''
-    );
-    console.log('📝 Cartes avec DELIVRANCE:', cartesAvecDelivrance.length);
-    
     setResultats(nouvellesCartes);
     setHasModifications(true);
   };
@@ -495,6 +462,19 @@ const Inventaire: React.FC = () => {
       if (!confirmChange) return;
     }
     handleRecherche(newPage);
+  };
+
+  // 📤 GESTION DU CLIC SUR "IMPORTER EXCEL"
+  const handleImportClick = () => {
+    if (!checkToken()) return;
+    
+    const hideInstructions = localStorage.getItem('hideImportInstructions');
+    
+    if (hideInstructions === 'true') {
+      fileInputRef.current?.click();
+    } else {
+      setShowImportModal(true);
+    }
   };
 
   return (

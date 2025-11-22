@@ -1,4 +1,8 @@
-// ===== services/utilisateursService.ts =====
+// ✅ VOTRE URL NGROK CORRIGÉE
+const API_URL = import.meta.env.VITE_API_URL || 'https://overnarrowly-incomparable-antoine.ngrok-free.dev';
+
+console.log('🎯 Service Utilisateurs - URL Ngrok:', API_URL);
+
 export interface LoginData {
   NomUtilisateur: string;
   MotDePasse: string;
@@ -19,12 +23,13 @@ export interface LoginResponse {
   utilisateur: Utilisateur;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 // Fonction pour se connecter
 export const loginUser = async (data: LoginData): Promise<LoginResponse> => {
   try {
-    const response = await fetch(`${API_URL}/api/auth/login`, {
+    const url = `${API_URL}/api/auth/login`;
+    console.log('🔗 Connexion à:', url);
+    
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,15 +38,21 @@ export const loginUser = async (data: LoginData): Promise<LoginResponse> => {
     });
 
     if (!response.ok) {
-      // On lit la réponse JSON pour récupérer le message d'erreur du backend
       const errorData = await response.json();
       throw new Error(errorData.message || "Erreur lors de la connexion");
     }
 
     const result: LoginResponse = await response.json();
+    console.log('✅ Connexion réussie:', result.utilisateur.NomUtilisateur);
     return result;
   } catch (error: any) {
-    // Propagation de l'erreur vers le frontend
+    console.error('❌ Erreur connexion:', error.message);
+    
+    // Message d'erreur amélioré
+    if (error.message.includes('Failed to fetch') || error.message.includes('Network Error')) {
+      throw new Error('🌐 Impossible de joindre le serveur. Vérifiez que le backend est démarré sur localhost:3000 et que Ngrok est actif.');
+    }
+    
     throw error;
   }
 };

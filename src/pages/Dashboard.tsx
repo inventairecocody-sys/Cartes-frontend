@@ -18,9 +18,54 @@ const Dashboard: React.FC = () => {
   const role = localStorage.getItem("role") || "";
   const token = localStorage.getItem("token") || "";
 
-  // ✅ VARIABLE D'ENVIRONNEMENT UTILISÉE
   const APP_NAME = import.meta.env.VITE_APP_NAME || 'Cartes Inventaire';
 
+  const fetchStatistiques = useCallback(async (force: boolean = false) => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      if (!token) {
+        throw new Error('Token non trouvé - Veuillez vous reconnecter');
+      }
+
+      console.log(force ? '🔄 Chargement FORCÉ des statistiques...' : '🔄 Chargement des statistiques...');
+      
+      const { globales, sites } = force 
+        ? await cartesService.forceRefreshAndGetStats(token)
+        : await cartesService.refreshStatistiques(token);
+      
+      setStatistiquesGlobales(globales);
+      setStatistiquesSites(sites);
+      setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
+      
+      if (force) {
+        localStorage.removeItem('forceStatsRefresh');
+      }
+      
+    } catch (err: any) {
+      console.error("❌ Erreur chargement statistiques:", err);
+      
+      let errorMessage = "Erreur lors du chargement des statistiques";
+      
+      if (err.message.includes('Failed to fetch') || err.message.includes('Network Error')) {
+        errorMessage = "❌ Impossible de joindre le serveur. Vérifiez que le backend est démarré.";
+      } else if (err.message.includes('401')) {
+        errorMessage = "🔐 Session expirée - Veuillez vous reconnecter";
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  // 🔄 CHARGEMENT INITIAL
+  useEffect(() => {
+    fetchStatistiques();
+  }, [fetchStatistiques]);
+
+  // Composants d'interface...
   const CarteStatistique: React.FC<{
     titre: string;
     valeur: number;
@@ -31,7 +76,7 @@ const Dashboard: React.FC = () => {
     const gradients = {
       orange: 'from-[#F77F00] to-[#FF9E40]',
       bleu: 'from-[#0077B6] to-[#2E8B57]',
-      vert: 'from-[#2E8B57] to-[#0077B6]'
+      vert: 'from-[#2E8B57] to-[#0077B57]'
     };
 
     return (
@@ -101,119 +146,6 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const fetchStatistiques = useCallback(async (force: boolean = false) => {
-    try {
-      setLoading(true);
-      setError("");
-      
-      if (!token) {
-        throw new Error('Token non trouvé');
-      }
-
-      console.log(force ? '🔄 Chargement FORCÉ des statistiques...' : '🔄 Chargement des statistiques...');
-      
-      // Utiliser forceRefreshAndGetStats si forcé
-      const { globales, sites } = force 
-        ? await cartesService.forceRefreshAndGetStats(token)
-        : await cartesService.refreshStatistiques(token);
-      
-      setStatistiquesGlobales(globales);
-      setStatistiquesSites(sites);
-      setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
-      
-      // Nettoyer le flag force
-      if (force) {
-        localStorage.removeItem('forceStatsRefresh');
-      }
-      
-      console.log('✅ Statistiques chargées:', {
-        total: globales.total,
-        retires: globales.retires,
-        sites: sites.length,
-        forced: force
-      });
-      
-    } catch (err: any) {
-      console.error("❌ Erreur chargement statistiques:", err);
-      setError("Erreur lors du chargement des statistiques");
-      // Ne pas reset les stats pour garder l'ancienne vue
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  // 🔄 CHARGEMENT INITIAL
-  useEffect(() => {
-    fetchStatistiques();
-  }, [fetchStatistiques]);
-
-  // 🔄 SYNCHRONISATION AUTOMATIQUE TOUTES LES 5 MINUTES
-  useEffect(() => {
-    const interval = setInterval(() => fetchStatistiques(), 300000);
-    return () => clearInterval(interval);
-  }, [fetchStatistiques]);
-
-  // 🔄 ÉCOUTEUR D'ÉVÉNEMENTS AMÉLIORÉ
-  useEffect(() => {
-    const handleRefreshEvent = (event: any) => {
-      const force = event.detail?.force || localStorage.getItem('forceStatsRefresh') === 'true';
-      const source = event.detail?.source || 'unknown';
-      
-      console.log('🔄 Rafraîchissement déclenché', { 
-        force, 
-        source,
-        from: event.detail?.source 
-      });
-      
-      fetchStatistiques(force);
-    };
-
-    window.addEventListener('dashboardRefreshNeeded', handleRefreshEvent);
-    
-    return () => {
-      window.removeEventListener('dashboardRefreshNeeded', handleRefreshEvent);
-    };
-  }, [fetchStatistiques]);
-
-  // 🔄 AJOUTEZ AUSSI CET ÉCOUTEUR POUR BROADCAST CHANNEL
-  useEffect(() => {
-    if (typeof BroadcastChannel !== 'undefined') {
-      const channel = new BroadcastChannel('dashboard_updates');
-      
-      channel.onmessage = (event) => {
-        if (event.data.type === 'data_updated') {
-          console.log('📡 Message BroadcastChannel reçu:', event.data);
-          const force = event.data.forceRefresh || false;
-          fetchStatistiques(force);
-        }
-      };
-      
-      return () => channel.close();
-    }
-  }, [fetchStatistiques]);
-
-  // 🔄 VÉRIFICATION PÉRIODIQUE DES MODIFICATIONS
-  useEffect(() => {
-    const checkForUpdates = () => {
-      const lastUpdate = localStorage.getItem('lastDataUpdate');
-      if (lastUpdate) {
-        const updateTime = parseInt(lastUpdate);
-        const currentTime = Date.now();
-        // Si modification récente (moins de 2 minutes)
-        if (currentTime - updateTime < 120000) {
-          console.log('🔄 Modification récente détectée, rafraîchissement...');
-          fetchStatistiques(true);
-        }
-      }
-    };
-
-    const updateInterval = setInterval(checkForUpdates, 30000); // Vérifier toutes les 30s
-    return () => clearInterval(updateInterval);
-  }, [fetchStatistiques]);
-
-  const totalCartesSites = statistiquesSites.reduce((sum, site) => sum + site.total, 0);
-  const isDataConsistent = totalCartesSites === statistiquesGlobales.total;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
       <Navbar role={role} />
@@ -223,7 +155,7 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-gradient-to-br from-[#F77F00] to-[#FF9E40] rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white text-xl font-bold">📊</span>
+                <span className="text-white text-xl">📊</span>
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -262,12 +194,13 @@ const Dashboard: React.FC = () => {
               <div className="w-16 h-16 border-4 border-[#F77F00] border-t-transparent rounded-full animate-spin"></div>
               <div>
                 <p className="text-gray-900 font-bold text-lg">Chargement des statistiques</p>
-                <p className="text-sm text-gray-600 mt-1">Calcul en cours...</p>
+                <p className="text-sm text-gray-600 mt-1">Connexion via Ngrok...</p>
               </div>
             </div>
           </div>
         ) : (
           <div className="max-w-7xl mx-auto space-y-8">
+            {/* ... reste du code Dashboard identique ... */}
             <motion.section 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -310,17 +243,6 @@ const Dashboard: React.FC = () => {
                   delai={0.3}
                 />
               </div>
-
-              {isDataConsistent && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-4 flex items-center justify-center gap-2 text-sm text-green-600"
-                >
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  ✅ Données cohérentes : Total global = Somme des sites
-                </motion.div>
-              )}
             </motion.section>
 
             <motion.section
@@ -388,33 +310,6 @@ const Dashboard: React.FC = () => {
                 )}
               </AnimatePresence>
             </motion.section>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1 }}
-              className="fixed bottom-6 right-6 flex flex-col items-end gap-3"
-            >
-              <div className="bg-white/90 backdrop-blur-lg border-2 border-green-200 rounded-xl px-4 py-3 shadow-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <div className="text-right">
-                    <div className="text-xs font-medium text-gray-600">Synchronisation auto</div>
-                    <div className="text-sm font-bold text-green-600">Toutes les 5 min</div>
-                  </div>
-                </div>
-              </div>
-              
-              <button
-                onClick={() => fetchStatistiques(true)}
-                className="bg-gradient-to-br from-[#F77F00] to-[#FF9E40] text-white p-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-110 flex items-center justify-center"
-                title="Rafraîchir maintenant"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </motion.div>
           </div>
         )}
       </div>

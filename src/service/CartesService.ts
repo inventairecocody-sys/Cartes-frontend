@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : 'http://localhost:3000/api';
+// ✅ VOTRE URL NGROK CORRIGÉE
+const API_URL = import.meta.env.VITE_API_URL || 'https://overnarrowly-incomparable-antoine.ngrok-free.dev';
+
+console.log('🎯 Service Cartes - URL Ngrok:', API_URL);
 
 export interface Carte {
   "LIEU D'ENROLEMENT"?: string;
@@ -33,7 +36,10 @@ export interface StatistiqueSite {
 // 🔹 FONCTIONS OPTIMISÉES POUR LE DASHBOARD
 export const getStatistiquesGlobales = async (token: string): Promise<StatistiquesGlobales> => {
   try {
-    const response = await fetch(`${API_URL}/statistiques/globales`, {
+    const url = `${API_URL}/api/statistiques/globales`;
+    console.log('🔗 URL Statistiques Globales:', url);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -41,13 +47,21 @@ export const getStatistiquesGlobales = async (token: string): Promise<Statistiqu
       },
     });
 
-    if (response.ok) {
-      return await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Erreur statistiques globales:', {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
-    throw new Error('Endpoint statistiques/globales non disponible');
+    const data = await response.json();
+    console.log('✅ Statistiques globales reçues:', data);
+    return data;
+
   } catch (error) {
-    console.error('Erreur dans getStatistiquesGlobales:', error);
+    console.error('❌ Erreur dans getStatistiquesGlobales:', error);
     return {
       total: 0,
       retires: 0,
@@ -58,7 +72,10 @@ export const getStatistiquesGlobales = async (token: string): Promise<Statistiqu
 
 export const getStatistiquesParSite = async (token: string): Promise<StatistiqueSite[]> => {
   try {
-    const response = await fetch(`${API_URL}/statistiques/sites`, {
+    const url = `${API_URL}/api/statistiques/sites`;
+    console.log('🔗 URL Statistiques Sites:', url);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -66,13 +83,21 @@ export const getStatistiquesParSite = async (token: string): Promise<Statistique
       },
     });
 
-    if (response.ok) {
-      return await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Erreur statistiques sites:', {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
-    throw new Error('Endpoint statistiques/sites non disponible');
+    const data = await response.json();
+    console.log(`✅ ${data.length} sites reçus`);
+    return data;
+
   } catch (error) {
-    console.error('Erreur dans getStatistiquesParSite:', error);
+    console.error('❌ Erreur dans getStatistiquesParSite:', error);
     return [];
   }
 };
@@ -81,8 +106,10 @@ export const getStatistiquesParSite = async (token: string): Promise<Statistique
 export const forceRefreshStatistiques = async (token: string): Promise<void> => {
   try {
     console.log("🔄 Forçage du recalcul des statistiques...");
+    const url = `${API_URL}/api/statistiques/refresh`;
+    console.log('🔗 URL Refresh Stats:', url);
     
-    const response = await fetch(`${API_URL}/statistiques/refresh`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -91,12 +118,15 @@ export const forceRefreshStatistiques = async (token: string): Promise<void> => 
     });
 
     if (!response.ok) {
-      throw new Error(`Refresh failed: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Refresh failed: ${response.status} - ${errorText}`);
     }
 
     console.log("✅ Synchronisation des statistiques déclenchée");
+
   } catch (error) {
-    console.warn('⚠️ Refresh des statistiques échoué, continuation normale...', error);
+    console.warn('⚠️ Refresh des statistiques échoué:', error);
+    throw error;
   }
 };
 
@@ -162,7 +192,11 @@ export const updateCartes = async (cartes: Carte[], token: string): Promise<void
 
     const role = localStorage.getItem("role") || "";
     
-    const response = await fetch(`${API_URL}/cartes/batch`, {
+    const url = `${API_URL}/api/cartes/batch`;
+    console.log('🔗 URL Update Cartes:', url);
+    console.log('📤 Cartes à mettre à jour:', cartes.length);
+    
+    const response = await fetch(url, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -173,20 +207,29 @@ export const updateCartes = async (cartes: Carte[], token: string): Promise<void
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('❌ Erreur update cartes:', {
+        status: response.status,
+        error: errorText
+      });
       throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
-    await response.json();
+    const result = await response.json();
+    console.log('✅ Cartes mises à jour:', result);
+
   } catch (error) {
-    console.error('Erreur dans updateCartes:', error);
+    console.error('❌ Erreur dans updateCartes:', error);
     throw error;
   }
 };
 
-// 🔹 FONCTIONS EXISTANTES (inchangées)
+// 🔹 FONCTIONS EXISTANTES (CORRIGÉES)
 export const getCartes = async (token: string): Promise<Carte[]> => {
   try {
-    const response = await fetch(`${API_URL}/cartes`, {
+    const url = `${API_URL}/api/cartes`;
+    console.log('🔗 URL Get Cartes:', url);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -195,20 +238,24 @@ export const getCartes = async (token: string): Promise<Carte[]> => {
     });
 
     if (!response.ok) {
-      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
     return data.cartes || [];
   } catch (error) {
-    console.error('Erreur dans getCartes:', error);
+    console.error('❌ Erreur dans getCartes:', error);
     throw error;
   }
 };
 
 export const getCartesPaginated = async (token: string, page: number = 1, limit: number = 100): Promise<any> => {
   try {
-    const response = await fetch(`${API_URL}/cartes?page=${page}&limit=${limit}`, {
+    const url = `${API_URL}/api/cartes?page=${page}&limit=${limit}`;
+    console.log('🔗 URL Get Cartes Paginated:', url);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -217,12 +264,13 @@ export const getCartesPaginated = async (token: string, page: number = 1, limit:
     });
 
     if (!response.ok) {
-      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Erreur dans getCartesPaginated:', error);
+    console.error('❌ Erreur dans getCartesPaginated:', error);
     throw error;
   }
 };
@@ -260,7 +308,10 @@ export const rechercherCartes = async (
     if (criteres.page) params.append('page', criteres.page.toString());
     if (criteres.limit) params.append('limit', criteres.limit.toString());
 
-    const response = await fetch(`${API_URL}/inventaire/recherche?${params}`, {
+    const url = `${API_URL}/api/inventaire/recherche?${params}`;
+    console.log('🔗 URL Recherche Cartes:', url);
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -270,19 +321,43 @@ export const rechercherCartes = async (
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('❌ Erreur recherche cartes:', {
+        status: response.status,
+        url: response.url,
+        error: errorText
+      });
       throw new Error(`Erreur ${response.status}: ${errorText}`);
     }
 
-    return await response.json();
+    // ✅ Vérification que c'est bien du JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('❌ Réponse non-JSON recherche:', text.substring(0, 200));
+      throw new Error(`Réponse non-JSON: ${text.substring(0, 100)}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Résultats recherche:', {
+      cartes: data.cartes?.length || 0,
+      total: data.total,
+      page: data.page
+    });
+
+    return data;
+
   } catch (error) {
-    console.error('Erreur dans rechercherCartes:', error);
+    console.error('❌ Erreur dans rechercherCartes:', error);
     throw error;
   }
 };
 
 export const createCarte = async (carte: Carte, token: string): Promise<number> => {
   try {
-    const response = await fetch(`${API_URL}/cartes`, {
+    const url = `${API_URL}/api/cartes`;
+    console.log('🔗 URL Create Carte:', url);
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -299,14 +374,17 @@ export const createCarte = async (carte: Carte, token: string): Promise<number> 
     const data = await response.json();
     return data.id;
   } catch (error) {
-    console.error('Erreur dans createCarte:', error);
+    console.error('❌ Erreur dans createCarte:', error);
     throw error;
   }
 };
 
 export const deleteCarte = async (id: number, token: string): Promise<void> => {
   try {
-    const response = await fetch(`${API_URL}/cartes/${id}`, {
+    const url = `${API_URL}/api/cartes/${id}`;
+    console.log('🔗 URL Delete Carte:', url);
+    
+    const response = await fetch(url, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -321,7 +399,7 @@ export const deleteCarte = async (id: number, token: string): Promise<void> => {
 
     await response.json();
   } catch (error) {
-    console.error('Erreur dans deleteCarte:', error);
+    console.error('❌ Erreur dans deleteCarte:', error);
     throw error;
   }
 };
@@ -333,7 +411,10 @@ export const getStatistiques = async (token: string): Promise<{
   parSite: { [site: string]: number };
 }> => {
   try {
-    const response = await fetch(`${API_URL}/cartes/statistiques/total`, {
+    const url = `${API_URL}/api/cartes/statistiques/total`;
+    console.log('🔗 URL Get Statistiques:', url);
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -347,7 +428,7 @@ export const getStatistiques = async (token: string): Promise<{
 
     return await response.json();
   } catch (error) {
-    console.error('Erreur dans getStatistiques:', error);
+    console.error('❌ Erreur dans getStatistiques:', error);
     throw error;
   }
 };
