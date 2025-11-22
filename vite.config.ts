@@ -6,10 +6,25 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000', // ✅ Changez 3001 → 3000
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
       }
     }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts']
+        }
+      }
+    }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom']
   }
 })
