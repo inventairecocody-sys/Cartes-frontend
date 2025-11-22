@@ -26,11 +26,15 @@ const Profil: React.FC = () => {
 
   const navigate = useNavigate();
   const role = localStorage.getItem("role") || "";
+  
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const APP_NAME = import.meta.env.VITE_APP_NAME || 'Cartes Inventaire';
+  const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
 
   const fetchProfile = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/profil', {
+      const response = await fetch(`${API_URL}/api/profil`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -70,7 +74,7 @@ const Profil: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/profil/password', {
+      const response = await fetch(`${API_URL}/api/profil/password`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -114,6 +118,11 @@ const Profil: React.FC = () => {
     setShowLogoutConfirm(false);
   };
 
+  const clearMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -126,7 +135,7 @@ const Profil: React.FC = () => {
           <div className="container mx-auto px-6">
             <h1 className="text-2xl font-bold flex items-center gap-3">
               <span className="bg-white/20 p-2 rounded-xl">👤</span>
-              Mon Profil
+              {APP_NAME} - Mon Profil
             </h1>
           </div>
         </div>
@@ -151,10 +160,10 @@ const Profil: React.FC = () => {
         <div className="container mx-auto px-6">
           <h1 className="text-2xl font-bold flex items-center gap-3">
             <span className="bg-white/20 p-2 rounded-xl">👤</span>
-            Mon Profil Utilisateur
+            {APP_NAME} - Mon Profil Utilisateur
           </h1>
           <p className="text-white/90 mt-1 text-sm">
-            Gestion de votre compte et sécurité - COORDINATION ABIDJAN NORD-COCODY
+            Gestion de votre compte et sécurité - v{APP_VERSION}
           </p>
         </div>
       </div>
@@ -170,7 +179,7 @@ const Profil: React.FC = () => {
             <span className="text-lg">⚠️</span>
             <span className="flex-1">{error}</span>
             <button 
-              onClick={() => setError('')}
+              onClick={clearMessages}
               className="text-red-500 hover:text-red-700 text-lg font-bold"
             >
               ×
@@ -187,7 +196,7 @@ const Profil: React.FC = () => {
             <span className="text-lg">✅</span>
             <span className="flex-1">{success}</span>
             <button 
-              onClick={() => setSuccess('')}
+              onClick={clearMessages}
               className="text-green-500 hover:text-green-700 text-lg font-bold"
             >
               ×
@@ -495,7 +504,7 @@ const Profil: React.FC = () => {
               </h3>
               
               <p className="text-gray-600 mb-6">
-                Êtes-vous sûr de vouloir vous déconnecter ?
+                Êtes-vous sûr de vouloir vous déconnecter de {APP_NAME} ?
               </p>
 
               <div className="flex gap-3 justify-center">

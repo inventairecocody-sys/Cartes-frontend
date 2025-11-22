@@ -18,6 +18,9 @@ const Dashboard: React.FC = () => {
   const role = localStorage.getItem("role") || "";
   const token = localStorage.getItem("token") || "";
 
+  // ✅ URL DE L'API AVEC VARIABLE D'ENVIRONNEMENT
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
   const CarteStatistique: React.FC<{
     titre: string;
     valeur: number;

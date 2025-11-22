@@ -38,6 +38,9 @@ const Inventaire: React.FC = () => {
   const canExportResults = ["Administrateur", "Superviseur"].includes(role);
   const canImportExcel = ["Administrateur", "Superviseur"].includes(role);
 
+  // ✅ URL DE L'API AVEC VARIABLE D'ENVIRONNEMENT
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
   // ✅ FONCTION DE VÉRIFICATION DU TOKEN
   const checkToken = (): boolean => {
     const token = localStorage.getItem('token');
@@ -97,7 +100,7 @@ const Inventaire: React.FC = () => {
     console.log('✅ Notification du Dashboard terminée');
   };
 
-  // 🔍 RECHERCHE MULTICRITÈRES AVEC PAGINATION
+  // 🔍 RECHERCHE MULTICRITÈRES AVEC PAGINATION - CORRIGÉE
   const handleRecherche = async (page: number = 1) => {
     if (!checkToken()) return;
     
@@ -111,7 +114,7 @@ const Inventaire: React.FC = () => {
       params.append('page', page.toString());
       params.append('limit', '50');
 
-      const response = await fetch(`http://localhost:3000/api/inventaire/recherche?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/api/inventaire/recherche?${params}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -251,7 +254,7 @@ const Inventaire: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:3000/api/import-export/import', {
+      const response = await fetch(`${API_BASE_URL}/api/import-export/import`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -300,7 +303,7 @@ const Inventaire: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:3000/api/import-export/import', {
+      const response = await fetch(`${API_BASE_URL}/api/import-export/import`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -363,7 +366,7 @@ const Inventaire: React.FC = () => {
     try {
       setLoading(true);
       
-      const response = await fetch(`http://localhost:3000/api/import-export/export`, {
+      const response = await fetch(`${API_BASE_URL}/api/import-export/export`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
         },
@@ -414,7 +417,7 @@ const Inventaire: React.FC = () => {
         }
       });
 
-      const response = await fetch(`http://localhost:3000/api/import-export/export-resultats?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/api/import-export/export-resultats?${params}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
         },
