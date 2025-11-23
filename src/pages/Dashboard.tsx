@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { cartesService } from "../service/CartesService";
 import { authService } from "../service/AuthService";
@@ -19,6 +20,7 @@ const Dashboard: React.FC = () => {
   
   const user = authService.getUser();
   const role = user?.Role || "";
+  const navigate = useNavigate();
 
   const CarteStatistique: React.FC<{
     titre: string;
@@ -111,7 +113,6 @@ const Dashboard: React.FC = () => {
 
       console.log(force ? '🔄 Chargement FORCÉ des statistiques...' : '🔄 Chargement des statistiques...');
       
-      // Utiliser forceRefreshAndGetStats si forcé
       const { globales, sites } = force 
         ? await cartesService.forceRefreshAndGetStats()
         : await cartesService.refreshStatistiques();
@@ -120,7 +121,6 @@ const Dashboard: React.FC = () => {
       setStatistiquesSites(sites);
       setLastUpdate(new Date().toLocaleTimeString('fr-FR'));
       
-      // Nettoyer le flag force
       if (force) {
         localStorage.removeItem('forceStatsRefresh');
       }
@@ -135,32 +135,28 @@ const Dashboard: React.FC = () => {
     } catch (err: any) {
       console.error("❌ Erreur chargement statistiques:", err);
       
-      // Gestion spécifique des erreurs d'authentification
       if (err.message?.includes('401') || err.message?.includes('non authentifié')) {
         setError("Session expirée. Veuillez vous reconnecter.");
         authService.logoutUser();
-        setTimeout(() => window.location.href = '/login', 2000);
+        setTimeout(() => navigate('/login'), 2000);
       } else {
         setError(err.message || "Erreur lors du chargement des statistiques");
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
-  // 🔄 CHARGEMENT INITIAL
   useEffect(() => {
-    // Vérifier l'authentification au chargement
     if (!authService.isAuthenticated()) {
       setError("Session expirée. Redirection...");
-      setTimeout(() => window.location.href = '/login', 1000);
+      setTimeout(() => navigate('/login'), 1000);
       return;
     }
     
     fetchStatistiques();
-  }, [fetchStatistiques]);
+  }, [fetchStatistiques, navigate]);
 
-  // 🔄 SYNCHRONISATION AUTOMATIQUE TOUTES LES 5 MINUTES
   useEffect(() => {
     const interval = setInterval(() => {
       if (authService.isAuthenticated()) {
@@ -170,7 +166,6 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchStatistiques]);
 
-  // 🔄 ÉCOUTEUR D'ÉVÉNEMENTS POUR RAFRAÎCHISSEMENT
   useEffect(() => {
     const handleRefreshEvent = (event: any) => {
       const force = event.detail?.force || localStorage.getItem('forceStatsRefresh') === 'true';
@@ -192,7 +187,6 @@ const Dashboard: React.FC = () => {
     };
   }, [fetchStatistiques]);
 
-  // 🔄 ÉCOUTEUR BROADCAST CHANNEL POUR MULTI-ONGlets
   useEffect(() => {
     if (typeof BroadcastChannel !== 'undefined') {
       const channel = new BroadcastChannel('dashboard_updates');
@@ -209,7 +203,6 @@ const Dashboard: React.FC = () => {
     }
   }, [fetchStatistiques]);
 
-  // 🔄 VÉRIFICATION PÉRIODIQUE DES MODIFICATIONS
   useEffect(() => {
     const checkForUpdates = () => {
       if (!authService.isAuthenticated()) return;
@@ -218,7 +211,6 @@ const Dashboard: React.FC = () => {
       if (lastUpdate) {
         const updateTime = parseInt(lastUpdate);
         const currentTime = Date.now();
-        // Si modification récente (moins de 2 minutes)
         if (currentTime - updateTime < 120000) {
           console.log('🔄 Modification récente détectée, rafraîchissement...');
           fetchStatistiques(true);
@@ -234,7 +226,7 @@ const Dashboard: React.FC = () => {
   const isDataConsistent = totalCartesSites === statistiquesGlobales.total;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       <Navbar role={role} />
       
       <div className="bg-white/80 backdrop-blur-lg border-b border-gray-200 py-4 shadow-sm">
@@ -242,7 +234,7 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-gradient-to-br from-[#F77F00] to-[#FF9E40] rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white text-xl font-bold">📊</span>
+                <span className="text-white text-xl">📊</span>
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
