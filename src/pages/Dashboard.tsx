@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import { cartesService } from "../service/CartesService";
+import { authService } from "../service/AuthService";
 import type { StatistiquesGlobales, StatistiqueSite } from "../service/CartesService";
 
 const Dashboard: React.FC = () => {
@@ -15,8 +16,9 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdate, setLastUpdate] = useState<string>("");
-  const role = localStorage.getItem("role") || "";
-  const token = localStorage.getItem("token") || "";
+  
+  const user = authService.getUser();
+  const role = user?.Role || "";
 
   const CarteStatistique: React.FC<{
     titre: string;
@@ -103,16 +105,16 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError("");
       
-      if (!token) {
-        throw new Error('Token non trouvé');
+      if (!authService.isAuthenticated()) {
+        throw new Error('Utilisateur non authentifié');
       }
 
       console.log(force ? '🔄 Chargement FORCÉ des statistiques...' : '🔄 Chargement des statistiques...');
       
       // Utiliser forceRefreshAndGetStats si forcé
       const { globales, sites } = force 
-        ? await cartesService.forceRefreshAndGetStats(token)
-        : await cartesService.refreshStatistiques(token);
+        ? await cartesService.forceRefreshAndGetStats()
+        : await cartesService.refreshStatistiques();
       
       setStatistiquesGlobales(globales);
       setStatistiquesSites(sites);
@@ -132,37 +134,55 @@ const Dashboard: React.FC = () => {
       
     } catch (err: any) {
       console.error("❌ Erreur chargement statistiques:", err);
-      setError("Erreur lors du chargement des statistiques");
-      // Ne pas reset les stats pour garder l'ancienne vue
+      
+      // Gestion spécifique des erreurs d'authentification
+      if (err.message?.includes('401') || err.message?.includes('non authentifié')) {
+        setError("Session expirée. Veuillez vous reconnecter.");
+        authService.logoutUser();
+        setTimeout(() => window.location.href = '/login', 2000);
+      } else {
+        setError(err.message || "Erreur lors du chargement des statistiques");
+      }
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   // 🔄 CHARGEMENT INITIAL
   useEffect(() => {
+    // Vérifier l'authentification au chargement
+    if (!authService.isAuthenticated()) {
+      setError("Session expirée. Redirection...");
+      setTimeout(() => window.location.href = '/login', 1000);
+      return;
+    }
+    
     fetchStatistiques();
   }, [fetchStatistiques]);
 
   // 🔄 SYNCHRONISATION AUTOMATIQUE TOUTES LES 5 MINUTES
   useEffect(() => {
-    const interval = setInterval(() => fetchStatistiques(), 300000);
+    const interval = setInterval(() => {
+      if (authService.isAuthenticated()) {
+        fetchStatistiques();
+      }
+    }, 300000);
     return () => clearInterval(interval);
   }, [fetchStatistiques]);
 
-  // 🔄 ÉCOUTEUR D'ÉVÉNEMENTS AMÉLIORÉ
+  // 🔄 ÉCOUTEUR D'ÉVÉNEMENTS POUR RAFRAÎCHISSEMENT
   useEffect(() => {
     const handleRefreshEvent = (event: any) => {
       const force = event.detail?.force || localStorage.getItem('forceStatsRefresh') === 'true';
-      const source = event.detail?.source || 'unknown';
       
       console.log('🔄 Rafraîchissement déclenché', { 
         force, 
-        source,
-        from: event.detail?.source 
+        source: event.detail?.source 
       });
       
-      fetchStatistiques(force);
+      if (authService.isAuthenticated()) {
+        fetchStatistiques(force);
+      }
     };
 
     window.addEventListener('dashboardRefreshNeeded', handleRefreshEvent);
@@ -172,13 +192,13 @@ const Dashboard: React.FC = () => {
     };
   }, [fetchStatistiques]);
 
-  // 🔄 AJOUTEZ AUSSI CET ÉCOUTEUR POUR BROADCAST CHANNEL
+  // 🔄 ÉCOUTEUR BROADCAST CHANNEL POUR MULTI-ONGlets
   useEffect(() => {
     if (typeof BroadcastChannel !== 'undefined') {
       const channel = new BroadcastChannel('dashboard_updates');
       
       channel.onmessage = (event) => {
-        if (event.data.type === 'data_updated') {
+        if (event.data.type === 'data_updated' && authService.isAuthenticated()) {
           console.log('📡 Message BroadcastChannel reçu:', event.data);
           const force = event.data.forceRefresh || false;
           fetchStatistiques(force);
@@ -192,6 +212,8 @@ const Dashboard: React.FC = () => {
   // 🔄 VÉRIFICATION PÉRIODIQUE DES MODIFICATIONS
   useEffect(() => {
     const checkForUpdates = () => {
+      if (!authService.isAuthenticated()) return;
+      
       const lastUpdate = localStorage.getItem('lastDataUpdate');
       if (lastUpdate) {
         const updateTime = parseInt(lastUpdate);
@@ -204,7 +226,7 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    const updateInterval = setInterval(checkForUpdates, 30000); // Vérifier toutes les 30s
+    const updateInterval = setInterval(checkForUpdates, 30000);
     return () => clearInterval(updateInterval);
   }, [fetchStatistiques]);
 
@@ -227,7 +249,7 @@ const Dashboard: React.FC = () => {
                   Tableau de Bord Statistique
                 </h1>
                 <p className="text-sm text-gray-600">
-                  COORDINATION ABIDJAN NORD-COCODY
+                  COORDINATION ABIDJAN NORD-COCODY • Rôle: {role}
                 </p>
               </div>
             </div>
