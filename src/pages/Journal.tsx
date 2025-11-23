@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from "../components/Navbar";
+import { authService } from "../service/AuthService";
 
 interface JournalEntry {
     JournalID: number;
@@ -44,9 +45,6 @@ interface ImportBatch {
     Agence: string;
 }
 
-// ✅ CORRECTION : UTILISER LA VARIABLE D'ENVIRONNEMENT
-const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : 'http://localhost:3000/api';
-
 const Journal: React.FC = () => {
     const [logs, setLogs] = useState<JournalEntry[]>([]);
     const [imports, setImports] = useState<ImportBatch[]>([]);
@@ -70,7 +68,8 @@ const Journal: React.FC = () => {
     const [expandedRow, setExpandedRow] = useState<number | null>(null);
     const [showImports, setShowImports] = useState(false);
 
-    const token = localStorage.getItem("token") || "";
+    const user = authService.getUser();
+    const role = user?.Role || "";
 
     // 🎨 CONFIGURATION DES COULEURS PAR TYPE D'ACTION
     const getActionColor = (actionType: string) => {
@@ -424,6 +423,11 @@ const Journal: React.FC = () => {
 
     // ✅ FONCTION FETCH CORRIGÉE
     const fetchLogs = async (page: number = 1) => {
+        if (!authService.isAuthenticated()) {
+            console.error('❌ Utilisateur non authentifié');
+            return;
+        }
+
         setLoading(true);
         try {
             const queryParams = new URLSearchParams({
@@ -432,12 +436,17 @@ const Journal: React.FC = () => {
                 ...filters
             });
 
-            const response = await fetch(`${API_BASE_URL}/journal?${queryParams}`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/journal?${queryParams}`, {
                 headers: { 
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${authService.getToken()}`,
                     'Content-Type': 'application/json'
                 }
             });
+            
+            if (response.status === 401 || response.status === 403) {
+                authService.logoutUser();
+                return;
+            }
             
             if (!response.ok) {
                 throw new Error(`Erreur HTTP! statut: ${response.status}`);
@@ -447,7 +456,7 @@ const Journal: React.FC = () => {
             setLogs(data.logs);
             setPagination(data.pagination);
         } catch (error) {
-            console.error('Erreur chargement journal:', error);
+            console.error('❌ Erreur chargement journal:', error);
             alert('Erreur lors du chargement du journal');
         } finally {
             setLoading(false);
@@ -456,15 +465,25 @@ const Journal: React.FC = () => {
 
     // ✅ FONCTION FETCH IMPORTS CORRIGÉE
     const fetchImports = async () => {
+        if (!authService.isAuthenticated()) {
+            console.error('❌ Utilisateur non authentifié');
+            return;
+        }
+
         setImportsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/journal/imports`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/journal/imports`, {
                 headers: { 
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${authService.getToken()}`,
                     'Content-Type': 'application/json'
                 }
             });
 
+            if (response.status === 401 || response.status === 403) {
+                authService.logoutUser();
+                return;
+            }
+            
             if (!response.ok) {
                 throw new Error(`Erreur HTTP! statut: ${response.status}`);
             }
@@ -472,7 +491,7 @@ const Journal: React.FC = () => {
             const data = await response.json();
             setImports(data);
         } catch (error) {
-            console.error('Erreur chargement imports:', error);
+            console.error('❌ Erreur chargement imports:', error);
             alert('Erreur lors du chargement des imports');
         } finally {
             setImportsLoading(false);
@@ -481,17 +500,22 @@ const Journal: React.FC = () => {
 
     // ✅ FONCTION ANNULATION IMPORT CORRIGÉE
     const handleAnnulerImport = async () => {
-        if (!selectedImport) return;
+        if (!selectedImport || !authService.isAuthenticated()) return;
 
         try {
-            const response = await fetch(`${API_BASE_URL}/journal/annuler-import`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/journal/annuler-import`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${authService.getToken()}`,
                 },
                 body: JSON.stringify({ importBatchID: selectedImport })
             });
+
+            if (response.status === 401 || response.status === 403) {
+                authService.logoutUser();
+                return;
+            }
 
             if (response.ok) {
                 setDialogOpen(false);
@@ -503,23 +527,33 @@ const Journal: React.FC = () => {
                 throw new Error('Erreur lors de l\'annulation');
             }
         } catch (error) {
-            console.error('Erreur annulation:', error);
+            console.error('❌ Erreur annulation:', error);
             alert('❌ Erreur lors de l\'annulation de l\'importation');
         }
     };
 
     // ✅ FONCTION POUR ANNULER LES ACTIONS
     const handleUndo = async (journalId: number) => {
+        if (!authService.isAuthenticated()) {
+            console.error('❌ Utilisateur non authentifié');
+            return;
+        }
+
         if (!window.confirm("Voulez-vous vraiment annuler cette action ?")) return;
 
         try {
-            const response = await fetch(`${API_BASE_URL}/journal/undo/${journalId}`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/journal/undo/${journalId}`, {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${token}`,
+                    "Authorization": `Bearer ${authService.getToken()}`,
                     "Content-Type": "application/json",
                 },
             });
+
+            if (response.status === 401 || response.status === 403) {
+                authService.logoutUser();
+                return;
+            }
 
             const data = await response.json();
             if (response.ok) {
@@ -529,12 +563,17 @@ const Journal: React.FC = () => {
                 alert(data.message || "❌ Erreur lors de l'annulation.");
             }
         } catch (error) {
-            console.error("Erreur annulation:", error);
+            console.error("❌ Erreur annulation:", error);
             alert("❌ Erreur réseau ou serveur.");
         }
     };
 
     useEffect(() => {
+        // Vérifier l'authentification au chargement
+        if (!authService.isAuthenticated()) {
+            console.error('❌ Accès non autorisé - Redirection nécessaire');
+            return;
+        }
         fetchLogs();
     }, [filters]);
 
@@ -556,6 +595,24 @@ const Journal: React.FC = () => {
         });
     };
 
+    // Vérifier si l'utilisateur a accès au journal (Administrateur seulement)
+    if (!['Administrateur', 'Superviseur'].includes(role)) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
+                <Navbar />
+                <div className="container mx-auto px-6 py-12">
+                    <div className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-xl border border-orange-100 p-12 text-center">
+                        <div className="text-4xl mb-4 text-[#F77F00]">🚫</div>
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">Accès non autorisé</h3>
+                        <p className="text-gray-600">
+                            Vous n'avez pas les permissions nécessaires pour accéder au journal d'activité.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
             <Navbar />
@@ -568,7 +625,7 @@ const Journal: React.FC = () => {
                         Journal d'Activité - Surveillance Complète
                     </h1>
                     <p className="text-white/90 mt-1 text-sm">
-                        Toutes les actions du système - Mode Administrateur - COORDINATION ABIDJAN NORD-COCODY
+                        Toutes les actions du système - Mode {role} - COORDINATION ABIDJAN NORD-COCODY
                     </p>
                 </div>
             </div>
@@ -1028,12 +1085,14 @@ const Journal: React.FC = () => {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+                    onClick={() => setDialogOpen(false)}
                 >
                     <motion.div
                         initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-auto border border-orange-100"
+                        onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center gap-4 mb-4">
                             <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-red-600 rounded-xl flex items-center justify-center">

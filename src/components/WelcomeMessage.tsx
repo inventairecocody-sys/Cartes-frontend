@@ -11,7 +11,7 @@ const WelcomeMessage: React.FC = () => {
       {/* EN-TÊTE AVEC GRADIENT ORANGE */}
       <div className="bg-gradient-to-r from-[#F77F00] to-[#FF9E40] text-white p-6">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/20 rounded-xl flex  items-center justify-center backdrop-blur-sm">
+          <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
             <span className="text-2xl">👋</span>
           </div>
           <div>

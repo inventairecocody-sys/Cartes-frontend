@@ -6,14 +6,14 @@ interface TableCartesExcelProps {
   cartes: Carte[];
   role: string;
   onUpdateCartes: (cartes: Carte[]) => void;
-  canEdit?: boolean; // ✅ Nouvelle prop pour gérer les permissions
+  canEdit?: boolean;
 }
 
 const TableCartesExcel: React.FC<TableCartesExcelProps> = ({ 
   cartes, 
   role, 
   onUpdateCartes,
-  canEdit = true // ✅ Par défaut true pour maintenir la compatibilité
+  canEdit = true
 }) => {
   const [editingCell, setEditingCell] = useState<{rowIndex: number, column: string} | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -35,7 +35,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
           canImport: true,
           canModify: true
         };
-      case "Chef d'équipe":
+      case "Chef":
         return {
           canEditAll: false,
           canExport: false,
@@ -61,7 +61,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
 
   const permissions = getPermissionsByRole();
 
-  // ✅ COLONNES AVEC DESIGN HARMONISÉ - CORRECTION TYPESCRIPT
+  // ✅ COLONNES AVEC DESIGN HARMONISÉ
   const colonnes = [
     { key: "NOM", label: "Nom", editable: permissions.canEditAll, width: "w-28" },
     { key: "PRENOMS", label: "Prénoms", editable: permissions.canEditAll, width: "w-28" },
@@ -100,8 +100,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
   // ✅ CLIC SUR UNE CELLULE POUR ÉDITION
   const handleCellClick = (rowIndex: number, column: string) => {
     const col = colonnes.find(col => col.key === column);
-    // ✅ CORRECTION TYPESCRIPT : Vérification explicite du boolean
-    if (col?.editable === true && col.type !== "checkbox" && canEdit) {
+    if (col?.editable && col.type !== "checkbox" && canEdit) {
       const currentValue = getCellValue(cartes[rowIndex], column);
       setEditValue(currentValue);
       setEditingCell({ rowIndex, column });
@@ -110,21 +109,15 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
 
   // ✅ MODIFICATION D'UNE CELLULE - CORRIGÉ POUR GARDER L'ID
   const handleCellChange = (value: any, rowIndex: number, column: string) => {
-    if (!canEdit) return; // ✅ Bloque les modifications si pas autorisé
+    if (!canEdit) return;
     
     console.log('🔍 TableCartesExcel - Modification cellule:', { rowIndex, column, value });
     
     const updatedCartes = [...cartes];
     const carteToUpdate = { 
-      ...updatedCartes[rowIndex],  // 🔥 GARDE TOUTES LES PROPRIÉTÉS DONT L'ID
-      ID: updatedCartes[rowIndex].ID // 🔥 FORCE LA CONSERVATION DE L'ID
+      ...updatedCartes[rowIndex],
+      ID: updatedCartes[rowIndex].ID
     };
-    
-    console.log('🔍 TableCartesExcel - Carte avant modification:', {
-      id: carteToUpdate.ID,
-      nom: carteToUpdate.NOM,
-      delivrance: carteToUpdate.DELIVRANCE
-    });
     
     switch (column) {
       case "NOM": carteToUpdate.NOM = value; break;
@@ -139,24 +132,11 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
       case "CONTACT DE RETRAIT": carteToUpdate["CONTACT DE RETRAIT"] = value; break;
       case "DATE DE DELIVRANCE": carteToUpdate["DATE DE DELIVRANCE"] = value; break;
       case "RETIREE":
-        if (value) {
-          carteToUpdate.DELIVRANCE = "Retirée";
-        } else {
-          carteToUpdate.DELIVRANCE = "";
-        }
+        carteToUpdate.DELIVRANCE = value ? "Retirée" : "";
         break;
     }
     
     updatedCartes[rowIndex] = carteToUpdate;
-    
-    console.log('🔍 TableCartesExcel - Carte après modification:', {
-      id: carteToUpdate.ID,
-      nom: carteToUpdate.NOM,
-      delivrance: carteToUpdate.DELIVRANCE
-    });
-    
-    console.log('🔍 TableCartesExcel - IDs envoyés à onUpdateCartes:', updatedCartes.map(c => c.ID));
-    
     onUpdateCartes(updatedCartes);
   };
 
@@ -171,7 +151,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
 
   // ✅ CHANGEMENT DE CHECKBOX
   const handleCheckboxChange = (rowIndex: number, column: string, checked: boolean) => {
-    if (!canEdit) return; // ✅ Bloque les modifications si pas autorisé
+    if (!canEdit) return;
     handleCellChange(checked, rowIndex, column);
   };
 
@@ -186,15 +166,11 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
     }
   };
 
-  // ✅ VÉRIFICATION DES PERMISSIONS (maintenant basée sur les permissions configurées)
+  // ✅ VÉRIFICATION DES PERMISSIONS
   const canEditCell = (columnKey: string): boolean => {
     const col = colonnes.find(col => col.key === columnKey);
-    // ✅ CORRECTION TYPESCRIPT : Vérification explicite du boolean
-    return col?.editable === true && canEdit;
+    return !!col?.editable && canEdit;
   };
-
-  // ✅ AFFICHAGE DES IDs POUR DEBUG (optionnel)
-  const showDebugInfo = false; // Mettre à true pour voir les IDs
 
   // ✅ BADGE DE STATUT DES PERMISSIONS
   const getPermissionBadge = () => {
@@ -220,7 +196,6 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
               <h3 className="text-lg font-bold">Tableau Excel des Cartes</h3>
               <p className="text-white/90 text-sm">
                 {cartes.length} carte{cartes.length > 1 ? 's' : ''} • Rôle: {role}
-                {showDebugInfo && ` • IDs: ${cartes.map(c => c.ID).join(', ')}`}
               </p>
             </div>
           </div>
@@ -236,22 +211,17 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
           {/* En-têtes des colonnes */}
           <thead>
             <tr className="bg-gradient-to-r from-[#0077B6] to-[#2E8B57] text-white">
-              {showDebugInfo && (
-                <th className="px-4 py-3 text-left text-sm font-semibold border-r border-white/20 w-16">
-                  ID
-                </th>
-              )}
               {colonnes.map((col) => (
                 <th 
                   key={col.key}
                   className={`px-4 py-3 text-left text-sm font-semibold border-r border-white/20 ${col.width} ${
-                    col.editable !== true ? "opacity-80" : ""
+                    !col.editable ? "opacity-80" : ""
                   }`}
-                  title={col.editable !== true ? "Non éditable" : ""}
+                  title={!col.editable ? "Non éditable" : ""}
                 >
                   <div className="flex items-center gap-2">
                     {col.label}
-                    {col.editable !== true && (
+                    {!col.editable && (
                       <span className="text-xs opacity-70">🔒</span>
                     )}
                   </div>
@@ -265,7 +235,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
             <AnimatePresence>
               {cartes.map((carte, rowIndex) => (
                 <motion.tr 
-                  key={carte.ID || rowIndex} // 🔥 Utilise l'ID comme clé si disponible
+                  key={carte.ID || rowIndex}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -276,15 +246,6 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
                       : "bg-white hover:bg-orange-50/30"
                   } ${!canEdit ? "cursor-default" : ""}`}
                 >
-                  {/* Colonne ID pour debug */}
-                  {showDebugInfo && (
-                    <td className="px-4 py-3 text-sm border-r border-gray-100 w-16 text-center bg-gray-50">
-                      <span className="text-xs text-gray-500 font-mono">
-                        {carte.ID || "N/A"}
-                      </span>
-                    </td>
-                  )}
-                  
                   {colonnes.map((col) => {
                     const cellValue = getCellValue(carte, col.key);
                     const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.column === col.key;
@@ -292,7 +253,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
                     
                     return (
                       <motion.td 
-                        key={`${carte.ID || rowIndex}-${col.key}`} // 🔥 Utilise l'ID dans la clé
+                        key={`${carte.ID || rowIndex}-${col.key}`}
                         whileHover={editable && col.type !== "checkbox" ? { scale: 1.02 } : {}}
                         className={`px-4 py-3 text-sm border-r border-gray-100 ${col.width} ${
                           col.type === "checkbox" ? "text-center" : ""
@@ -364,7 +325,7 @@ const TableCartesExcel: React.FC<TableCartesExcelProps> = ({
                             ) : (
                               <span className="text-gray-400 italic">-</span>
                             )}
-                            {!editable && col.editable === true && (
+                            {!editable && col.editable && (
                               <span className="ml-1 text-xs text-gray-400">🔒</span>
                             )}
                           </motion.div>

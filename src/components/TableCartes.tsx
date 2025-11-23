@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion } from "framer-motion"; // ✅ SUPPRESSION de AnimatePresence inutilisé
+import { motion } from "framer-motion";
 import type { Carte } from "../service/CartesService";
 
 interface TableCartesProps {
@@ -29,7 +29,7 @@ const TableCartes: React.FC<TableCartesProps> = ({ cartes, loading, role, onUpda
   };
 
   const handleChange = (id: number, field: string, value: string) => {
-    if (role === "Opérateur" && !["DELIVRANCE", "CONTACT DE RETRAIT", "DATE DE DELIVRANCE"].includes(field)) return;
+    if (role === "Operateur" && !["DELIVRANCE", "CONTACT DE RETRAIT", "DATE DE DELIVRANCE"].includes(field)) return;
     
     const updated = cartes.map(c => 
       c.ID === id ? { ...c, [field]: value } : c
@@ -39,7 +39,7 @@ const TableCartes: React.FC<TableCartesProps> = ({ cartes, loading, role, onUpda
   };
 
   const isEditable = (field: string): boolean => {
-    if (role === "Opérateur") {
+    if (role === "Operateur") {
       return ["DELIVRANCE", "CONTACT DE RETRAIT", "DATE DE DELIVRANCE"].includes(field);
     }
     return true;
@@ -97,7 +97,7 @@ const TableCartes: React.FC<TableCartesProps> = ({ cartes, loading, role, onUpda
               <h3 className="text-lg font-bold">Tableau des Cartes</h3>
               <p className="text-white/90 text-sm">
                 {cartes.length} carte{cartes.length > 1 ? 's' : ''} affichée{cartes.length > 1 ? 's' : ''}
-                {role === "Opérateur" && " - Mode consultation limité"}
+                {role === "Operateur" && " - Mode consultation limité"}
               </p>
             </div>
           </div>
@@ -189,14 +189,14 @@ const TableCartes: React.FC<TableCartesProps> = ({ cartes, loading, role, onUpda
         <div className="flex justify-between items-center text-sm text-gray-600">
           <span>
             {cartes.length} carte{cartes.length > 1 ? 's' : ''} • 
-            {role === "Opérateur" ? " Mode consultation" : " Mode édition complet"}
+            {role === "Operateur" ? " Mode consultation" : " Mode édition complet"}
           </span>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-2">
               <div className="w-2 h-2 bg-[#F77F00] rounded-full"></div>
               Champs éditables
             </span>
-            {role === "Opérateur" && (
+            {role === "Operateur" && (
               <span className="flex items-center gap-2 text-[#0077B6]">
                 <span>🔒</span>
                 Accès limité

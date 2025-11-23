@@ -18,7 +18,7 @@ const MotivationQuotes: React.FC = () => {
   useEffect(() => {
     const quoteTimer = setInterval(() => {
       setQuoteIndex((prev) => (prev + 1) % quotes.length);
-    }, 5000); // 5 secondes par citation
+    }, 10000); // 10 secondes par citation
     return () => clearInterval(quoteTimer);
   }, [quotes.length]);
 

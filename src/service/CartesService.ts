@@ -1,7 +1,5 @@
-// ✅ VOTRE URL NGROK CORRIGÉE
-const API_URL = import.meta.env.VITE_API_URL || 'https://overnarrowly-incomparable-antoine.ngrok-free.dev';
-
-console.log('🎯 Service Cartes - URL Ngrok:', API_URL);
+import api from './api';
+import type { AxiosResponse } from 'axios';
 
 export interface Carte {
   "LIEU D'ENROLEMENT"?: string;
@@ -24,6 +22,8 @@ export interface StatistiquesGlobales {
   total: number;
   retires: number;
   restants: number;
+  pourcentageRetrait?: number;
+  derniereMiseAJour?: string;
 }
 
 export interface StatistiqueSite {
@@ -31,253 +31,224 @@ export interface StatistiqueSite {
   total: number;
   retires: number;
   restants: number;
+  pourcentageRetrait?: number;
 }
 
-// 🔹 FONCTIONS OPTIMISÉES POUR LE DASHBOARD
-export const getStatistiquesGlobales = async (token: string): Promise<StatistiquesGlobales> => {
-  try {
-    const url = `${API_URL}/api/statistiques/globales`;
-    console.log('🔗 URL Statistiques Globales:', url);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+export interface RechercheResultat {
+  cartes: Carte[];
+  total: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+  hasMore?: boolean;
+}
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Erreur statistiques globales:', {
-        status: response.status,
-        error: errorText
-      });
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+  timestamp?: string;
+}
 
-    const data = await response.json();
-    console.log('✅ Statistiques globales reçues:', data);
-    return data;
-
-  } catch (error) {
-    console.error('❌ Erreur dans getStatistiquesGlobales:', error);
-    return {
-      total: 0,
-      retires: 0,
-      restants: 0
-    };
-  }
-};
-
-export const getStatistiquesParSite = async (token: string): Promise<StatistiqueSite[]> => {
-  try {
-    const url = `${API_URL}/api/statistiques/sites`;
-    console.log('🔗 URL Statistiques Sites:', url);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Erreur statistiques sites:', {
-        status: response.status,
-        error: errorText
-      });
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log(`✅ ${data.length} sites reçus`);
-    return data;
-
-  } catch (error) {
-    console.error('❌ Erreur dans getStatistiquesParSite:', error);
-    return [];
-  }
-};
-
-// 🔥 FONCTION POUR FORCER LE REFRESH
-export const forceRefreshStatistiques = async (token: string): Promise<void> => {
-  try {
-    console.log("🔄 Forçage du recalcul des statistiques...");
-    const url = `${API_URL}/api/statistiques/refresh`;
-    console.log('🔗 URL Refresh Stats:', url);
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Refresh failed: ${response.status} - ${errorText}`);
-    }
-
-    console.log("✅ Synchronisation des statistiques déclenchée");
-
-  } catch (error) {
-    console.warn('⚠️ Refresh des statistiques échoué:', error);
-    throw error;
-  }
-};
-
-// 🔹 SERVICE UNIFIÉ POUR LE DASHBOARD
+// 🔹 SERVICE UNIFIÉ ET OPTIMISÉ POUR LA PRODUCTION
 class CartesService {
-  async refreshStatistiques(token: string): Promise<{
+  private cache = new Map();
+  private cacheTimeout = 5 * 60 * 1000; // 5 minutes cache
+
+  // 🔹 STATISTIQUES OPTIMISÉES
+  async getStatistiquesGlobales(): Promise<StatistiquesGlobales> {
+    const cacheKey = 'stats_globales';
+    
+    try {
+      // Vérifier le cache
+      if (this.isCacheValid(cacheKey)) {
+        return this.cache.get(cacheKey).data;
+      }
+
+      console.log('📊 Chargement des statistiques globales...');
+      
+      const response: AxiosResponse<StatistiquesGlobales> = await api.get('/statistiques/globales');
+      
+      const stats = {
+        ...response.data,
+        pourcentageRetrait: response.data.total > 0 
+          ? Math.round((response.data.retires / response.data.total) * 100) 
+          : 0,
+        derniereMiseAJour: new Date().toISOString()
+      };
+
+      // Mettre en cache
+      this.setCache(cacheKey, stats);
+      
+      console.log('✅ Statistiques globales chargées:', stats);
+      return stats;
+      
+    } catch (error: any) {
+      console.error('❌ Erreur dans getStatistiquesGlobales:', error);
+      
+      // Retourner des valeurs par défaut en cas d'erreur
+      return {
+        total: 0,
+        retires: 0,
+        restants: 0,
+        pourcentageRetrait: 0,
+        derniereMiseAJour: new Date().toISOString()
+      };
+    }
+  }
+
+  async getStatistiquesParSite(): Promise<StatistiqueSite[]> {
+    const cacheKey = 'stats_sites';
+    
+    try {
+      // Vérifier le cache
+      if (this.isCacheValid(cacheKey)) {
+        return this.cache.get(cacheKey).data;
+      }
+
+      console.log('🏢 Chargement des statistiques par site...');
+      
+      const response: AxiosResponse<StatistiqueSite[]> = await api.get('/statistiques/sites');
+      
+      const sitesAvecPourcentage = response.data.map(site => ({
+        ...site,
+        pourcentageRetrait: site.total > 0 
+          ? Math.round((site.retires / site.total) * 100) 
+          : 0
+      }));
+
+      // Mettre en cache
+      this.setCache(cacheKey, sitesAvecPourcentage);
+      
+      console.log(`✅ ${sitesAvecPourcentage.length} sites chargés`);
+      return sitesAvecPourcentage;
+      
+    } catch (error: any) {
+      console.error('❌ Erreur dans getStatistiquesParSite:', error);
+      return [];
+    }
+  }
+
+  // 🔥 SYNCHRONISATION FORCÉE AVEC RETRY
+  async forceRefreshStatistiques(): Promise<void> {
+    try {
+      console.log("🔄 Forçage du recalcul des statistiques...");
+      
+      await apiUtils.retryRequest(
+        () => api.post('/statistiques/refresh'),
+        3, // 3 tentatives
+        1000 // délai initial de 1s
+      );
+
+      // Nettoyer le cache après refresh
+      this.clearCache(['stats_globales', 'stats_sites']);
+      
+      console.log("✅ Synchronisation des statistiques déclenchée");
+    } catch (error: any) {
+      console.warn('⚠️ Refresh des statistiques échoué:', error.message);
+      throw new Error(`Impossible de rafraîchir les statistiques: ${error.message}`);
+    }
+  }
+
+  // 🔹 SERVICE UNIFIÉ POUR LE DASHBOARD
+  async refreshStatistiques(): Promise<{
     globales: StatistiquesGlobales;
     sites: StatistiqueSite[];
+    timestamp: string;
   }> {
     try {
-      console.log("📊 Rafraîchissement des statistiques...");
+      console.log("📊 Rafraîchissement complet des statistiques...");
       
       const [globales, sites] = await Promise.all([
-        getStatistiquesGlobales(token),
-        getStatistiquesParSite(token)
+        this.getStatistiquesGlobales(),
+        this.getStatistiquesParSite()
       ]);
+      
+      const result = {
+        globales,
+        sites,
+        timestamp: new Date().toISOString()
+      };
       
       console.log("✅ Statistiques rafraîchies:", {
         total: globales.total,
         retires: globales.retires,
-        sites: sites.length
+        sites: sites.length,
+        timestamp: result.timestamp
       });
       
-      return { globales, sites };
-    } catch (error) {
+      return result;
+    } catch (error: any) {
       console.error('❌ Erreur lors du rafraîchissement des statistiques:', error);
       throw error;
     }
   }
 
   // 🔥 MÉTHODE POUR SYNCHRONISATION COMPLÈTE
-  async forceRefreshAndGetStats(token: string): Promise<{
+  async forceRefreshAndGetStats(): Promise<{
     globales: StatistiquesGlobales;
     sites: StatistiqueSite[];
+    timestamp: string;
   }> {
     try {
       console.log("🔄 Début de la synchronisation forcée...");
       
-      await forceRefreshStatistiques(token);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await this.forceRefreshStatistiques();
       
-      const result = await this.refreshStatistiques(token);
+      // Attendre un peu pour que le backend traite les données
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const result = await this.refreshStatistiques();
       
       console.log("✅ Synchronisation forcée terminée");
       return result;
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erreur lors de la synchronisation forcée:', error);
-      return await this.refreshStatistiques(token);
+      
+      // Fallback: retourner les données même si le refresh a échoué
+      console.log("🔄 Fallback: utilisation des données existantes...");
+      return await this.refreshStatistiques();
     }
   }
-}
 
-export const cartesService = new CartesService();
-
-// 🔹 FONCTION UPDATE CARTES CORRIGÉE
-export const updateCartes = async (cartes: Carte[], token: string): Promise<void> => {
-  try {
-    // ✅ VÉRIFICATION DU TOKEN
-    if (!token) {
-      throw new Error('Token manquant');
+  // 🔹 GESTION DES CARTES
+  async getCartes(): Promise<Carte[]> {
+    try {
+      console.log('🃏 Chargement des cartes...');
+      
+      const response: AxiosResponse<{ cartes: Carte[] }> = await api.get('/cartes');
+      const cartes = response.data.cartes || [];
+      
+      console.log(`✅ ${cartes.length} cartes chargées`);
+      return cartes;
+    } catch (error: any) {
+      console.error('❌ Erreur dans getCartes:', error);
+      throw new Error(`Impossible de charger les cartes: ${error.message}`);
     }
-
-    const role = localStorage.getItem("role") || "";
-    
-    const url = `${API_URL}/api/cartes/batch`;
-    console.log('🔗 URL Update Cartes:', url);
-    console.log('📤 Cartes à mettre à jour:', cartes.length);
-    
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ cartes, role }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Erreur update cartes:', {
-        status: response.status,
-        error: errorText
-      });
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Cartes mises à jour:', result);
-
-  } catch (error) {
-    console.error('❌ Erreur dans updateCartes:', error);
-    throw error;
   }
-};
 
-// 🔹 FONCTIONS EXISTANTES (CORRIGÉES)
-export const getCartes = async (token: string): Promise<Carte[]> => {
-  try {
-    const url = `${API_URL}/api/cartes`;
-    console.log('🔗 URL Get Cartes:', url);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
+  async getCartesPaginated(page: number = 1, limit: number = 100): Promise<RechercheResultat> {
+    try {
+      console.log(`📄 Chargement page ${page} (limit: ${limit})...`);
+      
+      const response: AxiosResponse<RechercheResultat> = await api.get(
+        `/cartes?page=${page}&limit=${limit}`
+      );
+      
+      const result = response.data;
+      result.hasMore = page < result.totalPages;
+      
+      console.log(`✅ Page ${page} chargée: ${result.cartes.length} cartes`);
+      return result;
+    } catch (error: any) {
+      console.error('❌ Erreur dans getCartesPaginated:', error);
+      throw new Error(`Impossible de charger les cartes paginées: ${error.message}`);
     }
-
-    const data = await response.json();
-    return data.cartes || [];
-  } catch (error) {
-    console.error('❌ Erreur dans getCartes:', error);
-    throw error;
   }
-};
 
-export const getCartesPaginated = async (token: string, page: number = 1, limit: number = 100): Promise<any> => {
-  try {
-    const url = `${API_URL}/api/cartes?page=${page}&limit=${limit}`;
-    console.log('🔗 URL Get Cartes Paginated:', url);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('❌ Erreur dans getCartesPaginated:', error);
-    throw error;
-  }
-};
-
-export const rechercherCartes = async (
-  token: string, 
-  criteres: {
+  async rechercherCartes(criteres: {
     nom?: string;
     prenom?: string;
     contact?: string;
@@ -287,148 +258,121 @@ export const rechercherCartes = async (
     rangement?: string;
     page?: number;
     limit?: number;
-  }
-): Promise<{
-  cartes: Carte[];
-  total: number;
-  page: number;
-  totalPages: number;
-  limit: number;
-}> => {
-  try {
-    const params = new URLSearchParams();
-    
-    if (criteres.nom) params.append('nom', criteres.nom);
-    if (criteres.prenom) params.append('prenom', criteres.prenom);
-    if (criteres.contact) params.append('contact', criteres.contact);
-    if (criteres.siteRetrait) params.append('siteRetrait', criteres.siteRetrait);
-    if (criteres.lieuNaissance) params.append('lieuNaissance', criteres.lieuNaissance);
-    if (criteres.dateNaissance) params.append('dateNaissance', criteres.dateNaissance);
-    if (criteres.rangement) params.append('rangement', criteres.rangement);
-    if (criteres.page) params.append('page', criteres.page.toString());
-    if (criteres.limit) params.append('limit', criteres.limit.toString());
-
-    const url = `${API_URL}/api/inventaire/recherche?${params}`;
-    console.log('🔗 URL Recherche Cartes:', url);
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Erreur recherche cartes:', {
-        status: response.status,
-        url: response.url,
-        error: errorText
+  }): Promise<RechercheResultat> {
+    try {
+      console.log('🔍 Recherche de cartes avec critères:', criteres);
+      
+      const params = new URLSearchParams();
+      
+      Object.entries(criteres).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value.toString());
+        }
       });
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
+
+      const response: AxiosResponse<RechercheResultat> = await api.get(
+        `/inventaire/recherche?${params}`
+      );
+
+      const result = response.data;
+      result.hasMore = (criteres.page || 1) < result.totalPages;
+      
+      console.log(`✅ Recherche terminée: ${result.cartes.length} résultats`);
+      return result;
+    } catch (error: any) {
+      console.error('❌ Erreur dans rechercherCartes:', error);
+      throw new Error(`Recherche échouée: ${error.message}`);
     }
-
-    // ✅ Vérification que c'est bien du JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('❌ Réponse non-JSON recherche:', text.substring(0, 200));
-      throw new Error(`Réponse non-JSON: ${text.substring(0, 100)}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ Résultats recherche:', {
-      cartes: data.cartes?.length || 0,
-      total: data.total,
-      page: data.page
-    });
-
-    return data;
-
-  } catch (error) {
-    console.error('❌ Erreur dans rechercherCartes:', error);
-    throw error;
   }
-};
 
-export const createCarte = async (carte: Carte, token: string): Promise<number> => {
-  try {
-    const url = `${API_URL}/api/cartes`;
-    console.log('🔗 URL Create Carte:', url);
+  async createCarte(carte: Carte): Promise<number> {
+    try {
+      console.log('➕ Création d\'une nouvelle carte...');
+      
+      const response: AxiosResponse<{ id: number }> = await api.post('/cartes', carte);
+      const newId = response.data.id;
+      
+      // Nettoyer le cache après modification
+      this.clearCache(['stats_globales', 'stats_sites']);
+      
+      console.log(`✅ Carte créée avec ID: ${newId}`);
+      return newId;
+    } catch (error: any) {
+      console.error('❌ Erreur dans createCarte:', error);
+      throw new Error(`Impossible de créer la carte: ${error.message}`);
+    }
+  }
+
+  async updateCartes(cartes: Carte[]): Promise<void> {
+    try {
+      console.log(`✏️ Mise à jour de ${cartes.length} carte(s)...`);
+      
+      const role = localStorage.getItem("role") || "";
+      
+      await api.put('/cartes/batch', { cartes, role });
+      
+      // Nettoyer le cache après modification
+      this.clearCache(['stats_globales', 'stats_sites']);
+      
+      console.log(`✅ ${cartes.length} carte(s) mises à jour`);
+    } catch (error: any) {
+      console.error('❌ Erreur dans updateCartes:', error);
+      throw new Error(`Impossible de mettre à jour les cartes: ${error.message}`);
+    }
+  }
+
+  async deleteCarte(id: number): Promise<void> {
+    try {
+      console.log(`🗑️ Suppression de la carte ${id}...`);
+      
+      await api.delete(`/cartes/${id}`);
+      
+      // Nettoyer le cache après modification
+      this.clearCache(['stats_globales', 'stats_sites']);
+      
+      console.log(`✅ Carte ${id} supprimée`);
+    } catch (error: any) {
+      console.error('❌ Erreur dans deleteCarte:', error);
+      throw new Error(`Impossible de supprimer la carte: ${error.message}`);
+    }
+  }
+
+  // 🔹 GESTION DU CACHE
+  private setCache(key: string, data: any): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+  }
+
+  private isCacheValid(key: string): boolean {
+    const cached = this.cache.get(key);
+    if (!cached) return false;
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(carte),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data.id;
-  } catch (error) {
-    console.error('❌ Erreur dans createCarte:', error);
-    throw error;
+    const isExpired = Date.now() - cached.timestamp > this.cacheTimeout;
+    return !isExpired;
   }
-};
 
-export const deleteCarte = async (id: number, token: string): Promise<void> => {
-  try {
-    const url = `${API_URL}/api/cartes/${id}`;
-    console.log('🔗 URL Delete Carte:', url);
-    
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Erreur ${response.status}: ${errorText}`);
-    }
-
-    await response.json();
-  } catch (error) {
-    console.error('❌ Erreur dans deleteCarte:', error);
-    throw error;
+  private clearCache(keys: string[]): void {
+    keys.forEach(key => this.cache.delete(key));
+    console.log('🧹 Cache nettoyé:', keys);
   }
-};
 
-export const getStatistiques = async (token: string): Promise<{
-  total: number;
-  retires: number;
-  disponibles: number;
-  parSite: { [site: string]: number };
-}> => {
-  try {
-    const url = `${API_URL}/api/cartes/statistiques/total`;
-    console.log('🔗 URL Get Statistiques:', url);
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('❌ Erreur dans getStatistiques:', error);
-    throw error;
+  // 🔹 MÉTHODE POUR NETTOYER TOUT LE CACHE
+  clearAllCache(): void {
+    this.cache.clear();
+    console.log('🧹 Tout le cache a été nettoyé');
   }
-};
+}
+
+// Instance du service
+export const cartesService = new CartesService();
+
+// 🔹 FONCTIONS DE COMPATIBILITÉ (pour l'existant)
+export const getStatistiquesGlobales = () => cartesService.getStatistiquesGlobales();
+export const getStatistiquesParSite = () => cartesService.getStatistiquesParSite();
+export const forceRefreshStatistiques = () => cartesService.forceRefreshStatistiques();
+
+// Export des utilitaires d'API depuis le fichier api
+import { apiUtils } from './api';
+export { apiUtils };

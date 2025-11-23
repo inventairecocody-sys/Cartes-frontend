@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Navbar from "../components/Navbar";
+import { authService } from "../service/AuthService";
 
 interface UserProfile {
   id: number;
@@ -25,21 +26,27 @@ const Profil: React.FC = () => {
   const [changingPassword, setChangingPassword] = useState(false);
 
   const navigate = useNavigate();
-  const role = localStorage.getItem("role") || "";
-  
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const APP_NAME = import.meta.env.VITE_APP_NAME || 'Cartes Inventaire';
-  const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
+  const user = authService.getUser();
+  const role = user?.Role || "";
 
   const fetchProfile = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/profil`, {
+      if (!authService.isAuthenticated()) {
+        throw new Error('Utilisateur non authentifié');
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profil`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authService.getToken()}`,
           'Content-Type': 'application/json',
         },
       });
+
+      if (response.status === 401 || response.status === 403) {
+        authService.logoutUser();
+        navigate('/login');
+        return;
+      }
 
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération du profil');
@@ -47,9 +54,9 @@ const Profil: React.FC = () => {
 
       const userData = await response.json();
       setProfile(userData);
-    } catch (err) {
-      setError('Erreur lors du chargement du profil');
-      console.error(err);
+    } catch (err: any) {
+      console.error('❌ Erreur chargement profil:', err);
+      setError(err.message || 'Erreur lors du chargement du profil');
     } finally {
       setLoading(false);
     }
@@ -73,11 +80,10 @@ const Profil: React.FC = () => {
     setSuccess('');
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/profil/password`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/profil/password`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authService.getToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -85,6 +91,12 @@ const Profil: React.FC = () => {
           newPassword
         }),
       });
+
+      if (response.status === 401 || response.status === 403) {
+        authService.logoutUser();
+        navigate('/login');
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -96,6 +108,7 @@ const Profil: React.FC = () => {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
+      console.error('❌ Erreur changement mot de passe:', err);
       setError(`❌ ${err.message || 'Erreur lors du changement de mot de passe'}`);
     } finally {
       setChangingPassword(false);
@@ -106,26 +119,24 @@ const Profil: React.FC = () => {
     setShowLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("NomUtilisateur");
+  const confirmLogout = async () => {
+    await authService.logoutUser();
     setShowLogoutConfirm(false);
-    navigate("/");
+    navigate("/login");
   };
 
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
   };
 
-  const clearMessages = () => {
-    setError('');
-    setSuccess('');
-  };
-
   useEffect(() => {
+    // Vérifier l'authentification au chargement
+    if (!authService.isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
     fetchProfile();
-  }, []);
+  }, [navigate]);
 
   if (loading) {
     return (
@@ -135,7 +146,7 @@ const Profil: React.FC = () => {
           <div className="container mx-auto px-6">
             <h1 className="text-2xl font-bold flex items-center gap-3">
               <span className="bg-white/20 p-2 rounded-xl">👤</span>
-              {APP_NAME} - Mon Profil
+              Mon Profil
             </h1>
           </div>
         </div>
@@ -160,10 +171,10 @@ const Profil: React.FC = () => {
         <div className="container mx-auto px-6">
           <h1 className="text-2xl font-bold flex items-center gap-3">
             <span className="bg-white/20 p-2 rounded-xl">👤</span>
-            {APP_NAME} - Mon Profil Utilisateur
+            Mon Profil Utilisateur
           </h1>
           <p className="text-white/90 mt-1 text-sm">
-            Gestion de votre compte et sécurité - v{APP_VERSION}
+            Gestion de votre compte et sécurité - COORDINATION ABIDJAN NORD-COCODY
           </p>
         </div>
       </div>
@@ -179,7 +190,7 @@ const Profil: React.FC = () => {
             <span className="text-lg">⚠️</span>
             <span className="flex-1">{error}</span>
             <button 
-              onClick={clearMessages}
+              onClick={() => setError('')}
               className="text-red-500 hover:text-red-700 text-lg font-bold"
             >
               ×
@@ -196,7 +207,7 @@ const Profil: React.FC = () => {
             <span className="text-lg">✅</span>
             <span className="flex-1">{success}</span>
             <button 
-              onClick={clearMessages}
+              onClick={() => setSuccess('')}
               className="text-green-500 hover:text-green-700 text-lg font-bold"
             >
               ×
@@ -223,7 +234,7 @@ const Profil: React.FC = () => {
                 </div>
               </div>
               
-              {profile && (
+              {profile ? (
                 <div className="space-y-4">
                   {/* NOM D'UTILISATEUR */}
                   <div>
@@ -275,6 +286,11 @@ const Profil: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <span className="text-4xl mb-3 block">❌</span>
+                  <p>Impossible de charger les informations du profil</p>
+                </div>
               )}
             </motion.div>
           </div>
@@ -309,6 +325,7 @@ const Profil: React.FC = () => {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-400 transition-all duration-300"
                     required
                     placeholder="Entrez votre mot de passe actuel"
+                    disabled={changingPassword}
                   />
                 </div>
 
@@ -324,6 +341,7 @@ const Profil: React.FC = () => {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-400 transition-all duration-300"
                     required
                     placeholder="Minimum 6 caractères"
+                    disabled={changingPassword}
                   />
                   <p className="text-xs text-gray-500 mt-2">Le mot de passe doit contenir au moins 6 caractères</p>
                 </div>
@@ -340,6 +358,7 @@ const Profil: React.FC = () => {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-green-100 focus:border-green-400 transition-all duration-300"
                     required
                     placeholder="Confirmez votre nouveau mot de passe"
+                    disabled={changingPassword}
                   />
                 </div>
 
@@ -487,12 +506,14 @@ const Profil: React.FC = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={cancelLogout}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-auto border border-orange-100"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">
               <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -504,7 +525,7 @@ const Profil: React.FC = () => {
               </h3>
               
               <p className="text-gray-600 mb-6">
-                Êtes-vous sûr de vouloir vous déconnecter de {APP_NAME} ?
+                Êtes-vous sûr de vouloir vous déconnecter ?
               </p>
 
               <div className="flex gap-3 justify-center">
